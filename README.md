@@ -166,7 +166,7 @@ Under the hood the concrete class for frame filters, `FrameFilterProcessor` inst
 ### Swift Package Manager
 
 On Xcode 11.0+ you can add a new dependency by going to **File / Swift Packages / Add Package Dependency...**
-and enter package repository URL https://github.com/dimitris-c/AudioStreaming.git, then follow the instructions.
+and enter package repository URL https://github.com/SantoshProdev/AudioStreaming.git, then follow the instructions.
 
 # Licence
 
