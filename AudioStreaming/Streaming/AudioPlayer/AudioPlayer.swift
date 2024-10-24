@@ -180,17 +180,17 @@ open class AudioPlayer {
     /// Starts the audio playback for the given URL
     ///
     /// - parameter url: A `URL` specifying the audio context to be played
-    public func play(url: URL) {
-        play(url: url, headers: [:])
+    public func play(url: URL, seekTime: Int) {
+        play(url: url, headers: [:], seekTime: seekTime)
     }
 
     /// Starts the audio playback for the given URL
     ///
     /// - parameter url: A `URL` specifying the audio context to be played.
     /// - parameter headers: A `Dictionary` specifying any additional headers to be pass to the network request.
-    public func play(url: URL, headers: [String: String]) {
+    public func play(url: URL, headers: [String: String], seekTime: Int) {
         let audioEntry = entryProvider.provideAudioEntry(url: url, headers: headers)
-        play(audioEntry: audioEntry)
+        play(audioEntry: audioEntry, seekTime: seekTime)
     }
 
     /// Starts the audio playback for the supplied stream
@@ -198,12 +198,12 @@ open class AudioPlayer {
     /// - parameter source: A `CoreAudioStreamSource` that will providing streaming data
     /// - parameter entryId: A `String` that provides a unique id for this item
     /// - parameter format: An `AVAudioFormat` the format of this audio source
-    public func play(source: CoreAudioStreamSource, entryId: String, format: AVAudioFormat) {
+    public func play(source: CoreAudioStreamSource, entryId: String, format: AVAudioFormat, seekTime: Int) {
         let audioEntry = AudioEntry(source: source, entryId: AudioEntryId(id: entryId), outputAudioFormat: format)
-        play(audioEntry: audioEntry)
+        play(audioEntry: audioEntry, seekTime: seekTime)
     }
 
-    private func play(audioEntry: AudioEntry) {
+    private func play(audioEntry: AudioEntry, seekTime: Int) {
         audioEntry.delegate = self
 
         checkRenderWaitingAndNotifyIfNeeded()
@@ -220,7 +220,7 @@ open class AudioPlayer {
 
         sourceQueue.async { [weak self] in
             guard let self = self else { return }
-            self.processSource()
+            self.processSource(seekTime: seekTime)
         }
     }
 
@@ -239,7 +239,7 @@ open class AudioPlayer {
 
         sourceQueue.async { [weak self] in
             guard let self = self else { return }
-            self.processSource()
+            self.processSource(seekTime: 0)
         }
     }
 
@@ -283,7 +283,7 @@ open class AudioPlayer {
         }
         checkRenderWaitingAndNotifyIfNeeded()
         sourceQueue.async { [weak self] in
-            self?.processSource()
+            self?.processSource(seekTime: 0)
         }
     }
 
@@ -310,7 +310,7 @@ open class AudioPlayer {
         }
         checkRenderWaitingAndNotifyIfNeeded()
         sourceQueue.async { [weak self] in
-            self?.processSource()
+            self?.processSource(seekTime: 0)
         }
     }
 
@@ -327,7 +327,7 @@ open class AudioPlayer {
         }
         checkRenderWaitingAndNotifyIfNeeded()
         sourceQueue.async { [weak self] in
-            self?.processSource()
+            self?.processSource(seekTime: 0)
         }
     }
 
@@ -355,7 +355,7 @@ open class AudioPlayer {
             self.playerContext.audioPlayingEntry = nil
             self.playerContext.entriesLock.unlock()
 
-            self.processSource()
+            self.processSource(seekTime: 0)
         }
     }
 
@@ -369,7 +369,7 @@ open class AudioPlayer {
             }
             playerContext.audioPlayingEntry?.suspend()
             sourceQueue.async { [weak self] in
-                self?.processSource()
+                self?.processSource(seekTime: 0)
             }
         }
     }
@@ -413,7 +413,7 @@ open class AudioPlayer {
             playingEntry.suspend()
             checkRenderWaitingAndNotifyIfNeeded()
             sourceQueue.async { [weak self] in
-                self?.processSource()
+                self?.processSource(seekTime: Int(time))
             }
         }
     }
@@ -521,7 +521,7 @@ open class AudioPlayer {
                 self.processFinishPlaying(entry: entry, with: nextEntry)
             }
             self.sourceQueue.async {
-                self.processSource()
+                self.processSource(seekTime: Int(entry?.progress ?? 0))
             }
         }
 
@@ -530,7 +530,7 @@ open class AudioPlayer {
             switch effect {
             case .processSource:
                 self.sourceQueue.async {
-                    self.processSource()
+                    self.processSource(seekTime: 0)
                 }
             case let .raiseError(error):
                 self.raiseUnexpected(error: error)
@@ -625,7 +625,7 @@ open class AudioPlayer {
     }
 
     /// Processing the `playerContext` state to ensure correct behavior of playing/stop/seek
-    private func processSource() {
+    private func processSource(seekTime: Int) {
         dispatchPrecondition(condition: .onQueue(sourceQueue))
 
         guard playerContext.internalState != .paused else { return }
@@ -633,7 +633,7 @@ open class AudioPlayer {
         if playerContext.internalState == .pendingNext {
             let entry = entriesQueue.dequeue(type: .upcoming)
             playerContext.setInternalState(to: .waitingForData)
-            setCurrentReading(entry: entry, startPlaying: true, shouldClearQueue: true)
+            setCurrentReading(entry: entry, startPlaying: true, shouldClearQueue: true, seekTime: seekTime)
             rendererContext.resetBuffers()
         } else if let playingEntry = playerContext.audioPlayingEntry,
                   playingEntry.seekRequest.requested,
@@ -647,13 +647,13 @@ open class AudioPlayer {
             }
             if configuration.flushQueueOnSeek {
                 playerContext.setInternalState(to: .waitingForDataAfterSeek)
-                setCurrentReading(entry: playingEntry, startPlaying: true, shouldClearQueue: true)
+                setCurrentReading(entry: playingEntry, startPlaying: true, shouldClearQueue: true, seekTime: seekTime)
             } else {
                 entriesQueue.requeueBufferingEntries { audioEntry in
                     audioEntry.reset()
                 }
                 playerContext.setInternalState(to: .waitingForDataAfterSeek)
-                setCurrentReading(entry: playingEntry, startPlaying: true, shouldClearQueue: false)
+                setCurrentReading(entry: playingEntry, startPlaying: true, shouldClearQueue: false, seekTime: seekTime)
             }
 
         } else if playerContext.audioReadingEntry == nil {
@@ -661,7 +661,7 @@ open class AudioPlayer {
                 let entry = entriesQueue.dequeue(type: .upcoming)
                 let shouldStartPlaying = playerContext.audioPlayingEntry == nil
                 playerContext.setInternalState(to: .waitingForData)
-                setCurrentReading(entry: entry, startPlaying: shouldStartPlaying, shouldClearQueue: false)
+                setCurrentReading(entry: entry, startPlaying: shouldStartPlaying, shouldClearQueue: false, seekTime: seekTime)
             } else if playerContext.audioPlayingEntry == nil {
                 if playerContext.internalState != .stopped {
                     stopEngine(reason: .eof)
@@ -697,7 +697,7 @@ open class AudioPlayer {
         fileStreamProcessor.processSeek()
     }
 
-    private func setCurrentReading(entry: AudioEntry?, startPlaying: Bool, shouldClearQueue: Bool) {
+    private func setCurrentReading(entry: AudioEntry?, startPlaying: Bool, shouldClearQueue: Bool, seekTime: Int) {
         guard let entry = entry else { return }
         Logger.debug("Setting current reading entry to: %@", category: .generic, args: entry.debugDescription)
         if startPlaying {
@@ -712,7 +712,7 @@ open class AudioPlayer {
         }
 
         entry.delegate = self
-        entry.seek(at: 0)
+        entry.seek(at: seekTime)
         playerContext.entriesLock.lock()
         playerContext.audioReadingEntry = entry
         playerContext.entriesLock.unlock()
@@ -784,7 +784,7 @@ open class AudioPlayer {
 
                 sourceQueue.async { [weak self] in
                     guard let self else { return }
-                    self.processSource()
+                    self.processSource(seekTime: Int(entry.progress))
                     asyncOnMain {
                         self.delegate?.audioPlayerDidFinishPlaying(
                             player: self,
@@ -798,7 +798,7 @@ open class AudioPlayer {
             }
         }
         sourceQueue.async { [weak self] in
-            self?.processSource()
+            self?.processSource(seekTime: Int(entry?.progress ?? 0))
         }
         checkRenderWaitingAndNotifyIfNeeded()
     }
@@ -901,7 +901,7 @@ extension AudioPlayer: AudioStreamSourceDelegate {
 
         sourceQueue.async { [weak self] in
             guard let self = self else { return }
-            self.processSource()
+            self.processSource(seekTime: 0)
         }
     }
 

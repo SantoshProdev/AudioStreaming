@@ -104,7 +104,7 @@ struct AudioPlayerControls: View {
         }
         .onChange(of: currentTrack) { oldValue, newValue in
             if let track = newValue {
-                model.play(track)
+                model.play(track, seekTime: 0)
             }
         }
     }
@@ -245,7 +245,7 @@ extension AudioPlayerControls {
             currentTrack = nil
         }
 
-        func play(_ track: AudioTrack) {
+        func play(_ track: AudioTrack, seekTime: Int) {
             if track != currentTrack {
                 currentTrack?.status = .idle
                 if track.url.scheme == "custom" {
@@ -253,10 +253,10 @@ extension AudioPlayerControls {
                     let audioFormat = AVAudioFormat(
                         commonFormat: .pcmFormatFloat32, sampleRate: 44100, channels: 2, interleaved: false
                     )!
-                    audioPlayerService.play(source: source, entryId: track.url.absoluteString, format: audioFormat)
+                    audioPlayerService.play(source: source, entryId: track.url.absoluteString, format: audioFormat, seekTime: seekTime)
                     currentTrack = track
                 } else {
-                    audioPlayerService.play(url: track.url)
+                    audioPlayerService.play(url: track.url, seekTime: seekTime)
                 }
             }
         }

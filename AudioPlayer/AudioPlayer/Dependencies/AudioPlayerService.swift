@@ -55,14 +55,14 @@ final class AudioPlayerService {
         registerSessionEvents()
     }
 
-    func play(url: URL) {
+    func play(url: URL, seekTime: Int) {
         activateAudioSession()
-        player.play(url: url)
+        player.play(url: url, seekTime: seekTime)
     }
 
-    func play(source: CoreAudioStreamSource, entryId: String, format: AVAudioFormat) {
+    func play(source: CoreAudioStreamSource, entryId: String, format: AVAudioFormat, seekTime: Int) {
         activateAudioSession()
-        player.play(source: source, entryId: entryId, format: format)
+        player.play(source: source, entryId: entryId, format: format, seekTime: seekTime)
     }
 
     func queue(url: URL) {
